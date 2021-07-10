@@ -12,7 +12,7 @@ dynamodb = boto3.resource('dynamodb', region_name="us-east-1")
 AliveTable = dynamodb.Table('ImAlive')
 IpAddress = ""
 cache = {}
-aliveInterval = 2 * 1000  # 2 seconds in millis
+aliveInterval = 12 * 1000  # 2 seconds in millis
 
 amountOfLivingNodes = 1
 liveNodesList = []
@@ -51,11 +51,11 @@ def changePartitionOfData(currentNumOfNodes, currentLiveNodesList):
                 if node == IpAddress:
                     addToCache(key, data, virtualKey, expirationDate)
                 else:
-                    requests.post(createURL('put', altNode, key, virtualKey, data, expirationDate)).json()
+                    requests.post(createURL('put', altNode, key, virtualKey, data, expirationDate))
                 if altNode == IpAddress:
                     addToCache(key, data, virtualKey, expirationDate)
                 else:
-                    requests.post(createURL('put', altNode, key, virtualKey, data, expirationDate)).json()
+                    requests.post(createURL('put', altNode, key, virtualKey, data, expirationDate))
     liveNodesList = currentLiveNodesList
     amountOfLivingNodes = currentNumOfNodes
 
