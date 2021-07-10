@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Adding new Instance to ELB cluster
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues: [ t2.micro ]
+    ConstraintDescription: must be a valid EC2 instance type.
+
+  LatestAmiId:
+    Type: String
+    Default: ami-09e67e426f25ce0d7
+
+  SecGroupId:
+    Description: the id of the security group
+    Type: String
+
+Resources:
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds:
+        - !Ref SecGroupId
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: CachingProfile
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            # Sleep for the instance role might not be properly attached
+            sleep 10
+            sudo apt-get update
+            sudo apt-get install python3-pip -y
+            sudo apt-get install python3-flask -y
+            pip3 install boto3
+            pip3 install xxhash
+            pip3 install jump-consistent-hash
+            cd /home/ubuntu
+            git clone https://github.com/EtamarRomano/CashingInTheCloud
+            cd cloud-computing && python3 app.py
+
+Outputs:
+  InstanceId:
+    Description: Instance ID of EC2 instance
+    Value: !Ref 'EC2Instance'
+  InstanceIP:
+    Description: Public IP address of this EC2 instance
+    Value: !GetAtt [EC2Instance, PublicIp]

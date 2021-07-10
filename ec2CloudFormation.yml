@@ -1,0 +1,353 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Caching in cloude - this will create 4 instances of EC2 and 2 security groups.
+
+Parameters:
+  KeyName:
+    Description: EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+
+  InstanceType:
+    Description: Regular EC2 instance 
+    Type: String
+    Default: t2.micro
+    AllowedValues: [t2.micro]
+    ConstraintDescription: must be a valid EC2 type t2 micro.
+
+  SSHLocation:
+    Description: Range of useable IP addresses SSH to the EC2 instances
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+
+  LatestAmiId:
+    Type:  String
+    Default: ami-09e67e426f25ce0d7
+
+  SubNetId1:
+    Description: First SubNet id 1
+    Type: String
+
+  SubNetId2:
+    Description: Second SubNet id 2
+    Type: String
+
+  SubNetId3:
+    Description: SubNet id 3
+    Type: String
+    
+  SubNetId4:
+    Description: SubNet id 4
+    Type: String
+
+  VPCId:
+    Description: vpc id
+    Type: String
+
+  VPCcidr:
+    Description: vpc cidr
+    Type: String
+
+Resources:
+
+  ImAlive:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ImAlive
+      AttributeDefinitions:
+        - AttributeName: "name"
+          AttributeType: "S"
+        - AttributeName: "lastTimeAlive"
+          AttributeType: "N"
+      KeySchema:
+        - AttributeName: "name"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+          ReadCapacityUnits: "5"
+          WriteCapacityUnits: "5"
+      GlobalSecondaryIndexes:
+      - IndexName: gsiCaseCountTable
+        KeySchema:
+          - AttributeName: lastTimeAlive
+            KeyType: HASH
+        Projection: 
+          ProjectionType: "ALL"
+        ProvisionedThroughput:
+          ReadCapacityUnits: "5"
+          WriteCapacityUnits: "5"
+    DependsOn:
+      - DynamoDBQueryPolicy
+
+  DynamoDBQueryPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: DynamoDBQueryPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: "dynamodb:*"
+            Resource: "*"
+      Roles:
+        - Ref: "TableRole"
+  
+  TableRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "dynamodb.amazonaws.com"
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+  
+  MyInstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      InstanceProfileName: CachingProfile
+      Path: "/"
+      Roles: 
+        - Ref: "TableRole"
+
+
+  ELBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22 and http access port 80
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: !Ref 'SSHLocation'
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: !Ref 'SSHLocation'
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: CachingEC2SecurityGroup
+      GroupDescription: Enable SSH access via port 22 and http access
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: !Ref 'SSHLocation'
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId:
+          Ref: ELBSecurityGroup
+
+  EC2Instance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds: 
+        - !Ref InstanceSecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile:  !Ref MyInstanceProfile
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            # waiting for role to attach
+            sleep 10
+            sudo apt-get update
+            sudo apt-get install python3-pip -y
+            sudo apt-get install python3-flask -y
+            pip3 install boto3
+            pip3 install xxhash
+            pip3 install jump-consistent-hash
+            cd /home/ubuntu
+            git clone https://github.com/EtamarRomano/CashingInTheCloud
+            cd cloud-computing && python3 app.py
+    DependsOn:
+      - TableRole
+
+  EC2Instance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds: 
+        - !Ref InstanceSecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile:  !Ref MyInstanceProfile
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            # waiting for role to attach
+            sleep 10
+            sudo apt-get update
+            sudo apt-get install python3-pip -y
+            sudo apt-get install python3-flask -y
+            pip3 install boto3
+            pip3 install xxhash
+            pip3 install jump-consistent-hash
+            cd /home/ubuntu
+            git clone https://github.com/EtamarRomano/CashingInTheCloud
+            cd cloud-computing && python3 app.py
+    DependsOn:
+      - TableRole
+
+
+  EC2Instance3:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds: 
+        - !Ref InstanceSecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile:  !Ref MyInstanceProfile
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            # waiting for role to attach
+            sleep 10
+            sudo apt-get update
+            sudo apt-get install python3-pip -y
+            sudo apt-get install python3-flask -y
+            pip3 install boto3
+            pip3 install xxhash
+            pip3 install jump-consistent-hash
+            cd /home/ubuntu
+            git clone https://github.com/EtamarRomano/CashingInTheCloud
+            cd cloud-computing && python3 app.py
+    DependsOn:
+      - TableRole
+
+
+  EC2Instance4:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile:  !Ref MyInstanceProfile
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            # waiting for role to attach
+            sleep 10
+            sudo apt-get update
+            sudo apt-get install python3-pip -y
+            sudo apt-get install python3-flask -y
+            pip3 install boto3
+            pip3 install xxhash
+            pip3 install jump-consistent-hash
+            cd /home/ubuntu
+            git clone https://github.com/EtamarRomano/CashingInTheCloud
+            cd cloud-computing && python3 app.py
+    DependsOn:
+      - TableRole
+
+
+  ElasticLoadBalancer: 
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Name: cachingELB
+      IpAddressType: ipv4
+      Scheme: internet-facing
+      SecurityGroups: 
+        - !GetAtt ELBSecurityGroup.GroupId
+      Subnets:
+        - Ref: SubNetId1
+        - Ref: SubNetId2
+        - Ref: SubNetId3
+        - Ref: SubNetId4
+      Type: application
+
+  ELBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /health-check
+      HealthCheckPort: 8080
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Matcher: 
+        HttpCode: '200'
+      Name: CachingTargetGroup
+      Port: 80
+      Protocol: HTTP
+      Targets: 
+        - Id: !Ref EC2Instance1
+          Port: 8080
+        - Id: !Ref EC2Instance2
+          Port: 8080
+        - Id: !Ref EC2Instance3
+          Port: 8080
+        - Id: !Ref EC2Instance4
+          Port: 8080
+      TargetType: instance
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VPCId
+
+  ELBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties: 
+      DefaultActions: 
+        - Type: forward
+          TargetGroupArn: !Ref ELBTargetGroup
+          Order: 100
+      LoadBalancerArn: !Ref ElasticLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+Outputs:
+  InstanceId1:
+    Description: InstanceId of EC2Instance1
+    Value: !Ref 'EC2Instance1'
+  Instance1IP:
+    Description: IP address of EC2Instance1
+    Value: !GetAtt [EC2Instance1, PublicIp]
+  InstanceId2:
+    Description: InstanceId of EC2Instance2
+    Value: !Ref 'EC2Instance2'
+  Instance2IP:
+    Description: IP address of EC2Instance2
+    Value: !GetAtt [EC2Instance2, PublicIp]
+  InstanceId3:
+    Description: InstanceId of EC2Instance3
+    Value: !Ref 'EC2Instance3'
+  Instance3IP:
+    Description: IP address of EC2Instance3
+    Value: !GetAtt [EC2Instance3, PublicIp]
+  InstanceId4:
+    Description: InstanceId of EC2Instance4
+    Value: !Ref 'EC2Instance4'
+  Instance4IP:
+    Description: IP address of EC2Instance4
+    Value: !GetAtt [EC2Instance4, PublicIp]
+  TargetGroup:
+    Description: Target group of the EC2 instances
+    Value: !Ref 'ELBTargetGroup'
+  LoadBalancer:
+    Description: Elastic Load Balancer
+    Value: !Ref 'ElasticLoadBalancer'
